@@ -1,0 +1,23 @@
+name: Avisos PADI Matemáticas
+
+on:
+workflow_dispatch:
+
+jobs:
+consultar-padi:
+runs-on: ubuntu-latest
+
+steps:
+- name: Descargar programa
+uses: actions/checkout@v4
+
+- name: Preparar Python
+uses: actions/setup-python@v5
+with:
+python-version: '3.12'
+
+- name: Consultar PADI y avisar por Telegram
+env:
+TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+run: python padi.py
