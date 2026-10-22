@@ -2,7 +2,7 @@
 import os
 import json
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 URL_PADI = (
@@ -13,9 +13,14 @@ URL_PADI = (
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
+
 hoy = datetime.now(ZoneInfo("Europe/Madrid"))
-fecha = hoy.strftime("%Y-%m-%d")
-fecha_visible = hoy.strftime("%d/%m/%Y")
+# Siguiente día entre lunes y viernes
+dia_asignacion = hoy + timedelta(days=1)
+while dia_asignacion.weekday() >= 5:
+    dia_asignacion += timedelta(days=1)
+fecha = dia_asignacion.strftime("%Y-%m-%d")
+fecha_visible = dia_asignacion.strftime("%d/%m/%Y")
 
 filtros = {
     "fcpublico": fecha,
