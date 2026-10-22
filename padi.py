@@ -13,10 +13,12 @@ URL_PADI = (
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
-hoy = datetime.now(ZoneInfo("Europe/Madrid")).strftime("%Y-%m-%d")
+hoy = datetime.now(ZoneInfo("Europe/Madrid"))
+fecha = hoy.strftime("%Y-%m-%d")
+fecha_visible = hoy.strftime("%d/%m/%Y")
 
 filtros = {
-    "fcpublico": hoy,
+    "fcpublico": fecha,
     "cfunc": "0590006",
     "coddat": "T",
     "itperfilacto": "E"
@@ -36,36 +38,115 @@ with urllib.request.urlopen(peticion, timeout=30) as respuesta:
     plazas = json.load(respuesta)
 
 if not isinstance(plazas, list):
-    raise ValueError("PADI no ha devuelto una lista de plazas")
+    raise ValueError("Respuesta inesperada de PADI")
 
-if not plazas:
-    mensaje = f"📚 PADI Matemáticas — {hoy}\n\nNo hay plazas en la consulta."
-else:
-    mensaje = (
-        f"📚 PADI Matemáticas — {hoy}\n"
-        f"Total: {len(plazas)} plazas\n\n"
-        + json.dumps(plazas, ensure_ascii=False, indent=2)
+
+def valor(plaza, campo):
+    return str(plaza.get(campo) or "").strip()
+
+
+def fecha_es(fecha_iso):
+    if not fecha_iso:
+        return "No indicada"
+    try:
+        return datetime.strptime(
+            fecha_iso[:10], "%Y-%m-%d"
+        ).strftime("%d/%m/%Y")
+    except ValueError:
+        return fecha_iso
+
+
+def ficha(plaza, numero):
+    centro = valor(plaza, "centro") or "Centro no indicado"
+    localidad = valor(plaza, "localidad") or "Sin localidad"
+    dat = valor(plaza, "dat") or "Sin DAT"
+
+    jornada = (
+        valor(plaza, "dtipopuesto")
+        or valor(plaza, "dtpvacante")
+        or valor(plaza, "tipopuesto")
+        or "No indicada"
     )
 
-# Telegram limita el tamaño de cada mensaje.
-# Dividimos el resultado sin eliminar plazas.
-for inicio in range(0, len(mensaje), 3500):
-    fragmento = mensaje[inicio:inicio + 3500]
+    tipo = (
+        valor(plaza, "dsustitucion")
+        or valor(plaza, "tipopuesto")
+        or "No indicado"
+    )
+
+    causa = valor(plaza, "causa") or "No indicada"
+    fin = fecha_es(valor(plaza, "fhasta"))
+    observaciones = valor(plaza, "observaciones")
+    identificador = valor(plaza, "idnsustituciones")
+
+    lineas = [
+        f"🏫 {numero}. {centro}",
+        f"📍 {localidad} · DAT {dat}",
+        f"🕒 Jornada: {jornada}",
+        f"📋 Tipo: {tipo}",
+        f"🩺 Causa: {causa}",
+        f"📅 Fin estimado: {fin}"
+    ]
+
+    if observaciones:
+        lineas.append(f"📝 {observaciones}")
+
+    if identificador:
+        lineas.append(f"🔎 ID: {identificador}")
+
+    return "\n".join(lineas)
+
+
+def enviar_telegram(texto):
     datos = json.dumps({
         "chat_id": CHAT_ID,
-        "text": fragmento
+        "text": texto
     }).encode("utf-8")
 
-    envio = urllib.request.Request(
+    peticion = urllib.request.Request(
         f"https://api.telegram.org/bot{TOKEN}/sendMessage",
         data=datos,
         headers={"Content-Type": "application/json"},
         method="POST"
     )
 
-    with urllib.request.urlopen(envio, timeout=30) as respuesta:
+    with urllib.request.urlopen(peticion, timeout=30) as respuesta:
         resultado = json.load(respuesta)
-        if not resultado.get("ok"):
-            raise RuntimeError("Telegram no ha aceptado el mensaje")
 
-print(f"Consulta completada: {len(plazas)} plazas")
+    if not resultado.get("ok"):
+        raise RuntimeError("Error al enviar a Telegram")
+
+
+cabecera = (
+    f"📚 PADI MATEMÁTICAS\n"
+    f"📅 {fecha_visible}\n"
+    f"📊 Total: {len(plazas)} plazas\n"
+    f"📍 Todas las DAT"
+)
+
+if not plazas:
+    enviar_telegram(
+        cabecera + "\n\nNo hay plazas en esta consulta."
+    )
+else:
+    # Telegram admite hasta 4096 caracteres por mensaje.
+    # Agrupamos fichas completas sin cortarlas por la mitad.
+    mensaje = cabecera
+
+    for numero, plaza in enumerate(plazas, 1):
+        bloque = "\n\n━━━━━━━━━━━━━━\n\n" + ficha(
+            plaza, numero
+        )
+
+        if len(mensaje) + len(bloque) > 3500:
+            enviar_telegram(mensaje)
+            mensaje = (
+                f"📚 PADI MATEMÁTICAS · Continuación\n"
+                f"📅 {fecha_visible}"
+            )
+
+        mensaje += bloque
+
+    enviar_telegram(mensaje)
+
+print(f"Enviadas {len(plazas)} plazas a Telegram")
