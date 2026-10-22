@@ -7,27 +7,52 @@ on:
     - cron: "10 13 * * 1-5"
     - cron: "10 14 * * 1-5"
 
+permissions:
+  contents: write
+
 jobs:
   consultar:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Descargar archivos
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Comprobar horario de Madrid
         id: horario
         env:
           TZ: Europe/Madrid
         run: |
-          if [ "$(date +%H:%M)" = "15:10" ]; then
+          HORA=$(date +%H)
+          if [ "$HORA" = "15" ]; then
             echo "ejecutar=si" >> "$GITHUB_OUTPUT"
           else
             echo "ejecutar=no" >> "$GITHUB_OUTPUT"
           fi
-      - name: Consultar PADI y enviar a Telegram
+
+      - name: Consultar PADI y avisar por Telegram
         if: steps.horario.outputs.ejecutar == 'si' || github.event_name == 'workflow_dispatch'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python padi.py
+
+      - name: Generar mapa
+        if: steps.horario.outputs.ejecutar == 'si' || github.event_name == 'workflow_dispatch'
+        run: python generar_mapa.py
+
+      - name: Publicar mapa en GitHub Pages
+        if: steps.horario.outputs.ejecutar == 'si' || github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html coordenadas.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Actualizar mapa PADI"
+            git push
+          fi
