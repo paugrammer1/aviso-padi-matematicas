@@ -3,6 +3,9 @@ name: Avisos PADI Matematicas
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "10 13 * * 1-5"
+    - cron: "10 14 * * 1-5"
 
 jobs:
   consultar:
@@ -12,7 +15,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Ejecutar consulta PADI
+      - name: Comprobar horario de Madrid
+        id: horario
+        env:
+          TZ: Europe/Madrid
+        run: |
+          if [ "$(date +%H:%M)" = "15:10" ]; then
+            echo "ejecutar=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "ejecutar=no" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Consultar PADI y enviar a Telegram
+        if: steps.horario.outputs.ejecutar == 'si' || github.event_name == 'workflow_dispatch'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
