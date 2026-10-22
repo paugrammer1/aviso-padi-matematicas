@@ -42,6 +42,9 @@ peticion = urllib.request.Request(
 with urllib.request.urlopen(peticion, timeout=30) as respuesta:
     plazas = json.load(respuesta)
 
+with open("plazas.json", "w", encoding="utf-8") as archivo:
+    json.dump(plazas, archivo, ensure_ascii=False, indent=2)
+
 if not isinstance(plazas, list):
     raise ValueError("Respuesta inesperada de PADI")
 
